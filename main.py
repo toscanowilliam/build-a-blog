@@ -1,10 +1,14 @@
-from flask import Flask, request, redirect, render_template, session, flash
+from flask import Flask, request, redirect, render_template, session, flash, url_for
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
+import cgi
+
+
+# https://github.com/LaunchCodeEducation/get-it-done/tree/d979a9991347431023d41abdd93891aedafc1f93
 
 app = Flask(__name__)
 app.config['DEBUG'] = True
-app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://build-a-blog:baseball1@localhost:8889/build-a-blog'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://blogz:password@localhost:8889/blogz'
 app.config['SQLALCHEMY_ECHO'] = True
 db = SQLAlchemy(app)
 app.secret_key = 'y337kGcys&zP3B'
@@ -14,11 +18,12 @@ class Entry(db.Model): #NEW ENTRY FOR DATABASE
     id = db.Column(db.Integer, primary_key=True) #Creates ID for each entry     
     title = db.Column(db.String(180)) #Adds vairable "title" to entry
     body = db.Column(db.String(1000)) #adds date
-    
+    owner_id = db.Column(db.Integer, db.ForeignKey('user.id'))
 
-    def __init__(self, title, body ):
+    def __init__(self, title, body, owner):
         self.title = title #stores variables in SELF for each entry
         self.body = body
+        self.owner = owner
 
     def is_valid(self):
        
@@ -28,39 +33,71 @@ class Entry(db.Model): #NEW ENTRY FOR DATABASE
             return False    
         
 
+class User(db.Model):
 
-@app.route("/")
+    id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(120), unique=True)
+    password = db.Column(db.String(120))
+    entry = db.relationship('Entry', backref='owner')
+
+    def __init__(self, email, password):
+        self.email = email
+        self.password = password
+
+
+
+
+@app.route("/", methods=['POST', 'GET'])
 def index():
-   
-    return redirect("/blog") #this is so that it redirects to front page each time a new entry 
-                                #happens or
+    
+    endpoints_without_login = ['login', 'register','logout', 'home']
+    if ('email' in session or request.endpoint in endpoints_without_login):
+            return redirect("/blog")
+    elif not ('email' in session):
+            return redirect("/home")
+    
+    
+    
+@app.route("/home", methods=['POST', 'GET'])
+def home_page():
 
+    user_id = request.args.get('id')
+    owner = User.query.filter_by(id=user_id).first()
+    encoded_error = request.args.get("error")
+    
+    if (user_id): #if the user clicks on a blog link, it takes them to that entry
+        all_entries = Entry.query.filter_by(owner=owner).all() #this gets the specific ID for what the user clicked on
+        return render_template('single_user.html', title="User", all_entries=all_entries)
+    users = User.query.all()
+
+    return render_template('index.html', title="All Users", users=users,error=encoded_error and cgi.escape(encoded_error, quote=True))
 
 @app.route('/blog', methods=['POST', 'GET'])
 def display_blog_entries():
-
-
+    
+    owner = User.query.filter_by(email=session['email']).first()
     entry_id = request.args.get('id') #this gets the ID for a specific entry
+    encoded_error = request.args.get("error")
     if (entry_id): #if the user clicks on a blog link, it takes them to that entry
         entry = Entry.query.get(entry_id) #this gets the specific ID for what the user clicked on
         return render_template('single_entry.html', title="Blog Entry", entry=entry)
-    all_entries = Entry.query.all() #Gets all entries
+    all_entries = Entry.query.filter_by(owner=owner).all() #Gets all entries
 
-    return render_template('all_entries.html', title="All Entries", all_entries=all_entries)
+    return render_template('all_entries.html', title="All Entries", all_entries=all_entries,owner=owner, error=encoded_error and cgi.escape(encoded_error, quote=True))
 
 @app.route('/new_entry', methods=['GET', 'POST'])
 def new_entry():
     
+
+    owner = User.query.filter_by(email=session['email']).first()
     if request.method == 'POST': #Once the user hits submit on new entry....
         new_entry_title = request.form['title'] #gets the title and body variables from HTML
         new_entry_body = request.form['body']
-        new_entry = Entry(new_entry_title, new_entry_body) #calls Entry class and adds to database
+        new_entry = Entry(new_entry_title, new_entry_body, owner) #calls Entry class and adds to database
 
         if new_entry.is_valid(): 
             db.session.add(new_entry) #if the SELF is valid, it adds to database
             db.session.commit()
-
-            
             url = "/blog?id=" + str(new_entry.id) #creates a link to just the new ID that was added
             return redirect(url)
         else:
@@ -73,6 +110,78 @@ def new_entry():
     else: # GET request
             return render_template('new_entry_form.html', title="Create new blog entry")
 
+
+
+def is_email(string):
+    # for our purposes, an email string has an '@' followed by a '.'
+    # there is an embedded language called 'regular expression' that would crunch this implementation down
+    # to a one-liner, but we'll keep it simple:
+    atsign_index = string.find('@')
+    atsign_present = atsign_index >= 0
+    if not atsign_present:
+        return False
+    else:
+        domain_dot_index = string.find('.', atsign_index)
+        domain_dot_present = domain_dot_index >= 0
+        return domain_dot_present
+
+@app.route('/login', methods=['POST', 'GET'])
+def login():
+    if request.method == 'GET':
+        return render_template('login.html')
+    elif request.method == 'POST':
+        email = request.form['email']
+        password = request.form['password']
+        users = User.query.filter_by(email=email).first()
+        
+        if users and users.password == password:
+                session['email'] = users.email
+                flash("Logged in")
+                print("*" *50)
+                return redirect(url_for(".index"))
+
+        else:
+                flash("Incorrect email or password")
+                return redirect('/')
+                
+
+@app.route("/logout", methods=['POST'])
+def logout():
+    owner = User.query.filter_by(email=session['email']).first()
+    if request.method == 'POST':
+        session['email'] = owner.email
+        del session['email']
+        return redirect("/")
+
+@app.route("/register", methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
+        email = request.form['email']
+        password = request.form['password']
+        verify = request.form['verify']
+        if not is_email(email):
+            flash('zoiks! "' + email + '" does not seem like an email address')
+            return redirect('/register')
+        email_db_count = User.query.filter_by(email=email).count()
+        if email_db_count > 0:
+            flash('yikes! "' + email + '" is already taken and password reminders are not implemented')
+            return redirect('/register')
+        if password != verify:
+            flash('passwords did not match')
+            return redirect('/register')
+        user = User(email=email, password=password)
+        db.session.add(user)
+        db.session.commit()
+        session['email'] = user.email
+        return redirect("/")
+    else:
+        return render_template('register.html')    
+
+@app.before_request
+def require_login():
+    endpoints_without_login = ['login', 'register','logout', 'index']
+    if not ('email' in session or request.endpoint in endpoints_without_login):
+            return redirect("/login")
+
 if __name__ == '__main__':
     app.run()
-
