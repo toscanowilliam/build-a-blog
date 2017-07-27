@@ -1,6 +1,6 @@
 from flask import Flask, request, redirect, render_template, session, flash, url_for
 from flask_sqlalchemy import SQLAlchemy
-from datetime import datetime
+import datetime
 import cgi
 
 
@@ -19,6 +19,7 @@ class Entry(db.Model): #NEW ENTRY FOR DATABASE
     title = db.Column(db.String(180)) #Adds vairable "title" to entry
     body = db.Column(db.String(1000)) #adds date
     owner_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    created = db.Column(db.DateTime, default=datetime.datetime.utcnow)
 
     def __init__(self, title, body, owner):
         self.title = title #stores variables in SELF for each entry
@@ -47,43 +48,30 @@ class User(db.Model):
 
 
 
-@app.route("/", methods=['POST', 'GET'])
+
+@app.route('/')
 def index():
-    
-    endpoints_without_login = ['login', 'register','logout', 'home']
-    if ('email' in session or request.endpoint in endpoints_without_login):
-            return redirect("/blog")
-    elif not ('email' in session):
-            return redirect("/home")
-    
-    
-    
-@app.route("/home", methods=['POST', 'GET'])
-def home_page():
 
-    user_id = request.args.get('id')
-    owner = User.query.filter_by(id=user_id).first()
-    encoded_error = request.args.get("error")
-    
-    if (user_id): #if the user clicks on a blog link, it takes them to that entry
-        all_entries = Entry.query.filter_by(owner=owner).all() #this gets the specific ID for what the user clicked on
-        return render_template('single_user.html', title="User", all_entries=all_entries)
     users = User.query.all()
-
-    return render_template('index.html', title="All Users", users=users,error=encoded_error and cgi.escape(encoded_error, quote=True))
+    return render_template('index.html', title='Users', users=users)
 
 @app.route('/blog', methods=['POST', 'GET'])
 def display_blog_entries():
-    
-    owner = User.query.filter_by(email=session['email']).first()
-    entry_id = request.args.get('id') #this gets the ID for a specific entry
-    encoded_error = request.args.get("error")
+   
+    user_id = request.args.get('user')
+    entry_id = request.args.get('id')
     if (entry_id): #if the user clicks on a blog link, it takes them to that entry
         entry = Entry.query.get(entry_id) #this gets the specific ID for what the user clicked on
         return render_template('single_entry.html', title="Blog Entry", entry=entry)
-    all_entries = Entry.query.filter_by(owner=owner).all() #Gets all entries
 
-    return render_template('all_entries.html', title="All Entries", all_entries=all_entries,owner=owner, error=encoded_error and cgi.escape(encoded_error, quote=True))
+    if (user_id):
+        user_id = int(user_id)
+        user = User.query.get(user_id)
+        all_entries = user.entry
+        return render_template('single_user.html',title="User", all_entries=all_entries,user=user)
+    all_entries = Entry.query.order_by(Entry.created.desc()).all()
+    
+    return render_template('all_entries.html', title="All Entries", all_entries=all_entries)
 
 @app.route('/new_entry', methods=['GET', 'POST'])
 def new_entry():
@@ -151,7 +139,7 @@ def logout():
     if request.method == 'POST':
         session['email'] = owner.email
         del session['email']
-        return redirect("/")
+        return redirect("/home")
 
 @app.route("/register", methods=['GET', 'POST'])
 def register():
@@ -179,7 +167,7 @@ def register():
 
 @app.before_request
 def require_login():
-    endpoints_without_login = ['login', 'register','logout', 'index']
+    endpoints_without_login = ['login', 'register','logout', 'display_blog_entries']
     if not ('email' in session or request.endpoint in endpoints_without_login):
             return redirect("/login")
 

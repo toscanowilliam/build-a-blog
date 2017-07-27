@@ -3,4 +3,6 @@
 {% block content %}
     <h1>{{ entry.title }}</h1>
     <p>{{ entry.body }}</p>
+    <p>{{ entry.created }}</p> 
+    <p> contributor: <a href="/blog?user={{ entry.owner.id }}">{{ entry.owner.email }}</a></p>
 {% endblock %}

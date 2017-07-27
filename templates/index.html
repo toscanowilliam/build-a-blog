@@ -6,7 +6,7 @@
         {% for user in users %} <!-- iterates through entrys from the all_entries variable in MAIN.py  -->
             <li>
                 <h2>
-                    <a href="/?id={{ user.id }}">{{ user.email }}</a> <!-- Creates a link for each entry ID  -->
+                    <a href="/blog?user={{ user.id }}">{{ user.email }}</a> <!-- Creates a link for each entry ID  -->
                 </h2>
                  <!-- displays the content of each blog in front page -->
             </li>

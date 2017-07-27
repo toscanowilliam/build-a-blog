@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block content %}
-    <h1>All Blog Entries</h1>
+    <h1>All Entries</h1>
     <ul>
         {% for entry in all_entries %} <!-- iterates through entrys from the all_entries variable in MAIN.py  -->
             <li>
@@ -9,7 +9,8 @@
                     <a href="/blog?id={{ entry.id }}">{{ entry.title }}</a> <!-- Creates a link for each entry ID  -->
                 </h2>
                 <p>{{ entry.body }}</p>
-                <p>{{ entry.created }}</p> <!-- displays the content of each blog in front page -->
+                <p>{{ entry.created }}</p> 
+                <!-- displays the content of each blog in front page -->
             </li>
         {% endfor %}
     </ul>
